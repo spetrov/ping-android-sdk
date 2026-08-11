@@ -25,9 +25,11 @@ import com.pingidentity.journey.module.NodeTransform
 import com.pingidentity.journey.module.Oidc
 import com.pingidentity.journey.module.RequestUrl
 import com.pingidentity.journey.module.Session
+import com.pingidentity.exception.ApiException
 import com.pingidentity.oidc.JsonConfigKey
 import com.pingidentity.oidc.JsonConfigParser
 import com.pingidentity.oidc.update
+import com.pingidentity.orchestrate.FailureNode
 import com.pingidentity.orchestrate.Node
 import com.pingidentity.orchestrate.Setup
 import com.pingidentity.orchestrate.SharedContext
@@ -35,6 +37,7 @@ import com.pingidentity.orchestrate.Workflow
 import com.pingidentity.orchestrate.WorkflowConfig
 import com.pingidentity.orchestrate.module.CustomHeader
 import com.pingidentity.utils.toAcceptLanguage
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.serialization.json.JsonObject
 import com.pingidentity.network.HttpRequest as Request
 
@@ -95,6 +98,52 @@ suspend fun Journey.resume(uri: Uri, option: Option.() -> Unit = {}): Node {
             START_REQUEST to fun Request.() {
                 parameter(SUSPENDED_ID, it)
             }
+        }
+        option(this, option)
+    }
+}
+
+/**
+ * Starts the authentication journey from a backchannel (transactional) URI received via
+ * push notification, QR code, or deep link.
+ *
+ * The URI's `authIndexType` and `authIndexValue` query parameters are extracted and forwarded
+ * to the AM authenticate endpoint. All other URI components (host, path, realm) are ignored;
+ * the authenticate endpoint is always reconstructed from [JourneyConfig.serverUrl] and
+ * [JourneyConfig.realm].
+ *
+ * @param backchannelUri The URI supplied by the backchannel initiation (e.g. from a push
+ *   notification payload or QR code). Must be a hierarchical URI containing `authIndexType`
+ *   and `authIndexValue` query parameters.
+ * @param option A lambda to configure additional options (e.g. [Option.forceAuth],
+ *   [Option.noSession]) for this request.
+ * @return A [Node] representing the result. Returns [FailureNode] immediately (without a
+ *   network call) if the Journey is not configured with [JourneyConfig], if the URI is
+ *   unparseable, or if either required query parameter is absent or blank.
+ */
+suspend fun Journey.start(backchannelUri: Uri, option: Option.() -> Unit = {}): Node {
+    if (config !is JourneyConfig) {
+        return FailureNode(ApiException(400, "JourneyConfig missing"))
+    }
+
+    val authIndexType: String?
+    val authIndexValue: String?
+    try {
+        authIndexType = backchannelUri.getQueryParameter(AUTH_INDEX_TYPE)
+        authIndexValue = backchannelUri.getQueryParameter(AUTH_INDEX_VALUE)
+    } catch (t: Throwable) {
+        if (t is CancellationException) throw t
+        return FailureNode(ApiException(400, "Invalid URI"))
+    }
+
+    if (authIndexType.isNullOrEmpty() || authIndexValue.isNullOrEmpty()) {
+        return FailureNode(ApiException(400, "Missing authIndexType or authIndexValue"))
+    }
+
+    return start {
+        START_REQUEST to fun Request.() {
+            parameter(AUTH_INDEX_TYPE, authIndexType)
+            parameter(AUTH_INDEX_VALUE, authIndexValue)
         }
         option(this, option)
     }

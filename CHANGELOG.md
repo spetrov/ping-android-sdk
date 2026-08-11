@@ -11,6 +11,7 @@
 - Added support for links in Translatable Rich Text (Forms) [SDKS-4246]
 - Added support for phone number extensions in `PhoneNumberCollector` [SDKS-4669]
 - Support for Android 17 (the SDK has been verified to build and run correctly on Android 17) [SDKS-5191]
+- Added AM/AIC transactional backchannel authentication support to the Journey module via `Journey.start(backchannelUri)` [SDKS-5157]
 
 #### Fixed
 - Fixed OATH and Push URI parsers to propagate typed `InvalidUriException` for structural URI parse errors [SDKS-5074]

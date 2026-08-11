@@ -298,6 +298,7 @@ internal fun buildWeb(config: OidcConfigState) {
 internal fun buildDeviceAuthClient(config: DeviceAuthConfigState) {
     OidcDeviceClient(
         buildJsonObject {
+            put(JsonConfigKey.LOG, "STANDARD")
             put(JsonConfigKey.OIDC, buildJsonObject {
                 put(JsonConfigKey.CLIENT_ID, config.clientId)
                 put(JsonConfigKey.DISCOVERY_ENDPOINT, config.discoveryEndpoint)
